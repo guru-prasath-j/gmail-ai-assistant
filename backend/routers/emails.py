@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 import httpx, base64, email as email_lib
@@ -71,6 +71,7 @@ def encode_message(to: str, subject: str, body: str, thread_id: str = None, repl
 
 @router.get("/inbox")
 async def get_inbox(max_results: int = 20, unread_only: bool = True):
+    import asyncio
     tokens = get_tokens()
     if not tokens:
         raise HTTPException(401, "Not authenticated")
@@ -79,11 +80,10 @@ async def get_inbox(max_results: int = 20, unread_only: bool = True):
     data = await gmail_get(f"/messages?labelIds=INBOX&q={query}&maxResults={max_results}", tokens["access_token"])
     messages = data.get("messages", [])
 
-    emails = []
-    for msg in messages:
+    async def fetch_detail(msg):
         detail = await gmail_get(f"/messages/{msg['id']}?format=full", tokens["access_token"])
         headers = detail.get("payload", {}).get("headers", [])
-        emails.append({
+        return {
             "id": detail["id"],
             "threadId": detail.get("threadId"),
             "subject": get_header(headers, "subject") or "(no subject)",
@@ -93,9 +93,10 @@ async def get_inbox(max_results: int = 20, unread_only: bool = True):
             "snippet": detail.get("snippet", ""),
             "body": extract_body(detail.get("payload", {}))[:3000],
             "unread": "UNREAD" in detail.get("labelIds", []),
-        })
+        }
 
-    return {"emails": emails, "count": len(emails)}
+    emails = await asyncio.gather(*[fetch_detail(msg) for msg in messages])
+    return {"emails": list(emails), "count": len(emails)}
 
 
 @router.get("/replies")

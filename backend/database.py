@@ -107,7 +107,7 @@ def save_email_reply(gmail_id, thread_id, subject, sender, snippet, reply):
 
 def update_reply_status(gmail_id, status, edited_reply=None):
     conn = get_conn()
-    if edited_reply:
+    if edited_reply is not None:
         conn.execute(
             "UPDATE email_replies SET status=?, generated_reply=?, sent_at=datetime('now') WHERE gmail_message_id=?",
             (status, edited_reply, gmail_id)

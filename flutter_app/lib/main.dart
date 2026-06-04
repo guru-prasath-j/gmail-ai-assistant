@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:app_links/app_links.dart';
+import 'package:flutter/foundation.dart';
 import 'theme.dart';
 import 'screens/home_screen.dart';
 import 'screens/setup_screen.dart';
@@ -19,18 +19,35 @@ class GmailAIApp extends StatefulWidget {
 }
 
 class _GmailAIAppState extends State<GmailAIApp> {
-  final _appLinks = AppLinks();
   final _navKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
     super.initState();
-    _appLinks.uriLinkStream.listen((uri) {
-      if (uri.scheme == 'gmailai' && uri.host == 'auth') {
-        // OAuth callback — navigate to home
-        _navKey.currentState?.pushNamedAndRemoveUntil('/', (_) => false);
-      }
-    });
+    if (!kIsWeb) {
+      _initDeepLinks();
+    }
+  }
+
+  void _initDeepLinks() async {
+    try {
+      // ignore: depend_on_referenced_packages
+      final appLinks = await _loadAppLinks();
+      appLinks?.listen((uri) {
+        if (uri.scheme == 'gmailai' && uri.host == 'auth') {
+          _navKey.currentState?.pushNamedAndRemoveUntil('/', (_) => false);
+        }
+      });
+    } catch (_) {}
+  }
+
+  Stream<Uri>? _loadAppLinks() {
+    try {
+      // dynamic import to avoid web crash
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
@@ -42,11 +59,11 @@ class _GmailAIAppState extends State<GmailAIApp> {
       debugShowCheckedModeBanner: false,
       initialRoute: '/',
       routes: {
-        '/':       (_) => const HomeScreen(),
-        '/setup':  (_) => const SetupScreen(),
-        '/inbox':  (_) => const InboxScreen(),
-        '/replies':(_) => const RepliesScreen(),
-        '/profile':(_) => const ProfileScreen(),
+        '/':        (_) => const HomeScreen(),
+        '/setup':   (_) => const SetupScreen(),
+        '/inbox':   (_) => const InboxScreen(),
+        '/replies': (_) => const RepliesScreen(),
+        '/profile': (_) => const ProfileScreen(),
       },
     );
   }

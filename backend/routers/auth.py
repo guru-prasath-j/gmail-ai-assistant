@@ -61,8 +61,33 @@ async def callback(code: str):
         expiry,
         email
     )
-    # Redirect to Flutter deep link
-    return RedirectResponse(url=f"gmailai://auth/success?email={email}")
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(content=f"""
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Gmail AI — Connected</title>
+  <style>
+    body {{ font-family: monospace; background: #08080F; color: #E0E0E0; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }}
+    .box {{ text-align: center; padding: 40px; border: 1px solid #222233; border-radius: 16px; background: #12121F; }}
+    .icon {{ font-size: 48px; }}
+    h2 {{ color: #00D084; margin: 16px 0 8px; }}
+    p {{ color: #888899; font-size: 13px; }}
+    .email {{ color: #FF6B35; margin: 8px 0; }}
+    button {{ margin-top: 24px; background: #FF6B35; color: white; border: none; padding: 12px 28px; border-radius: 8px; font-family: monospace; font-size: 14px; cursor: pointer; }}
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="icon">✓</div>
+    <h2>Gmail Connected!</h2>
+    <p class="email">{email}</p>
+    <p>Your Gmail account has been connected successfully.<br>Go back to the app and refresh the dashboard.</p>
+    <button onclick="window.close()">Close this tab</button>
+  </div>
+</body>
+</html>
+""", status_code=200)
 
 @router.post("/refresh")
 async def refresh_token():

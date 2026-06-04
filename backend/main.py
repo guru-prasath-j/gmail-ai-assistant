@@ -1,4 +1,7 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from dotenv import load_dotenv
+load_dotenv()
+
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uvicorn
@@ -8,7 +11,7 @@ from routers import auth, emails, llm, profile
 async def lifespan(app: FastAPI):
     from database import init_db
     init_db()
-    print("✅ Database initialized")
+    print("Database initialized")
     yield
 
 app = FastAPI(title="Gmail AI Assistant", version="1.0.0", lifespan=lifespan)
