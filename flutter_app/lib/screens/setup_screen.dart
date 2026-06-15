@@ -77,12 +77,7 @@ class _SetupScreenState extends State<SetupScreen> {
         Navigator.pop(context);
       }
     } catch (e) {
-      final msg = e.toString();
-      if (msg.contains('503') || msg.contains('Ollama')) {
-        setState(() => _error = 'Ollama is not running. Open a terminal and run:\n\n  ollama serve\n\nThen try again.');
-      } else {
-        setState(() => _error = 'Analysis failed: $msg');
-      }
+      setState(() => _error = 'Analysis failed: $e');
     } finally {
       setState(() => _analyzing = false);
     }
@@ -257,7 +252,7 @@ class _ErrorBox extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: AppTheme.red.withOpacity(0.1), borderRadius: BorderRadius.circular(10), border: Border.all(color: AppTheme.red.withOpacity(0.3))),
+      decoration: BoxDecoration(color: AppTheme.red.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10), border: Border.all(color: AppTheme.red.withValues(alpha: 0.3))),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Icon(Icons.error_outline_rounded, color: AppTheme.red, size: 16),
         const SizedBox(width: 8),

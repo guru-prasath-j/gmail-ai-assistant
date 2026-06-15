@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/api_service.dart';
 import '../theme.dart';
+import 'email_chat_screen.dart';
 
 class InboxScreen extends StatefulWidget {
   const InboxScreen({super.key});
@@ -76,7 +77,9 @@ class _InboxScreenState extends State<InboxScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? _ErrorState(error: _error!, onRetry: _load)
+              ? (_error!.contains('401') || _error!.contains('not connected') || _error!.contains('Not authenticated') || _error!.contains('Gmail not connected')
+                  ? _AuthErrorState(onGoHome: () => Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false))
+                  : _ErrorState(error: _error!, onRetry: _load))
               : _emails.isEmpty
                   ? Center(child: Text('No emails found', style: GoogleFonts.dmMono(color: AppTheme.textMute)))
                   : RefreshIndicator(
@@ -92,6 +95,10 @@ class _InboxScreenState extends State<InboxScreen> {
                             email: email,
                             hasReply: _replies.containsKey(id),
                             isGenerating: _generating.contains(id),
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => EmailChatScreen(email: email)),
+                            ).then((_) => _load()),
                             onGenerate: () => _generate(email),
                             onViewReply: _replies.containsKey(id) ? () => _showReplySheet(email, _replies[id]!) : null,
                           );
@@ -105,18 +112,21 @@ class _InboxScreenState extends State<InboxScreen> {
 class _EmailTile extends StatelessWidget {
   final Map<String, dynamic> email;
   final bool hasReply, isGenerating;
+  final VoidCallback onTap;
   final VoidCallback onGenerate;
   final VoidCallback? onViewReply;
-  const _EmailTile({required this.email, required this.hasReply, required this.isGenerating, required this.onGenerate, this.onViewReply});
+  const _EmailTile({required this.email, required this.hasReply, required this.isGenerating, required this.onTap, required this.onGenerate, this.onViewReply});
 
   @override
   Widget build(BuildContext context) {
     final unread = email['unread'] == true;
-    return Container(
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
       decoration: BoxDecoration(
         color: AppTheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: hasReply ? AppTheme.green.withOpacity(0.4) : AppTheme.border),
+        border: Border.all(color: hasReply ? AppTheme.green.withValues(alpha: 0.4) : AppTheme.border),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Padding(
@@ -170,6 +180,7 @@ class _EmailTile extends StatelessWidget {
           ]),
         ),
       ]),
+    ),
     );
   }
 }
@@ -308,6 +319,37 @@ class _ErrorState extends StatelessWidget {
           icon: const Icon(Icons.refresh_rounded, size: 16),
           label: Text('Retry', style: GoogleFonts.dmMono()),
           onPressed: onRetry,
+        ),
+      ]),
+    ));
+  }
+}
+
+class _AuthErrorState extends StatelessWidget {
+  final VoidCallback onGoHome;
+  const _AuthErrorState({required this.onGoHome});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(child: Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        const Icon(Icons.lock_outline_rounded, color: AppTheme.accent, size: 48),
+        const SizedBox(height: 20),
+        Text('Gmail Not Connected', style: GoogleFonts.dmMono(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.textPrim)),
+        const SizedBox(height: 10),
+        Text('Please login with your Gmail account\nfrom the home screen.', style: GoogleFonts.dmMono(fontSize: 12, color: AppTheme.textMute, height: 1.6), textAlign: TextAlign.center),
+        const SizedBox(height: 28),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.home_rounded, size: 16),
+          label: Text('Go to Home', style: GoogleFonts.dmMono(fontWeight: FontWeight.w600)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.accent,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          onPressed: onGoHome,
         ),
       ]),
     ));

@@ -8,7 +8,14 @@ class ApiService {
     connectTimeout: null,
     receiveTimeout: const Duration(seconds: 180),
     headers: {'Content-Type': 'application/json'},
-  ))..interceptors.add(LogInterceptor(responseBody: false));
+  ))..interceptors.addAll([LogInterceptor(responseBody: false), _AuthInterceptor()]);
+
+  static final Dio _llmDio = Dio(BaseOptions(
+    baseUrl: baseUrl,
+    connectTimeout: null,
+    receiveTimeout: const Duration(minutes: 10),
+    headers: {'Content-Type': 'application/json'},
+  ))..interceptors.addAll([LogInterceptor(responseBody: false), _AuthInterceptor()]);
 
   static Future<bool> checkHealth() async {
     try {
@@ -49,7 +56,7 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> analyzeTone(List<Map<String, String>> samples) async {
-    final r = await _dio.post('/llm/analyze-tone', data: {'samples': samples});
+    final r = await _llmDio.post('/llm/analyze-tone', data: {'samples': samples});
     return Map<String, dynamic>.from(r.data);
   }
 
@@ -71,7 +78,7 @@ class ApiService {
     required String body,
     bool save = true,
   }) async {
-    final r = await _dio.post('/llm/generate-reply', data: {
+    final r = await _llmDio.post('/llm/generate-reply', data: {
       'gmail_message_id': gmailMessageId,
       'thread_id': threadId,
       'subject': subject,
@@ -89,7 +96,7 @@ class ApiService {
     required String body,
     String? instruction,
   }) async {
-    final r = await _dio.post('/llm/regenerate-reply', data: {
+    final r = await _llmDio.post('/llm/regenerate-reply', data: {
       'gmail_message_id': gmailMessageId,
       'subject': subject,
       'sender': sender,
@@ -125,5 +132,43 @@ class ApiService {
 
   static Future<void> markRead(String messageId) async {
     await _dio.post('/emails/mark-read/$messageId');
+  }
+}
+
+class _AuthInterceptor extends Interceptor {
+  bool _refreshing = false;
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) async {
+    if (err.response?.statusCode == 401 && !_refreshing) {
+      _refreshing = true;
+      try {
+        final refreshDio = Dio(BaseOptions(baseUrl: ApiService.baseUrl));
+        await refreshDio.post('/auth/refresh');
+        // Retry original request
+        final retryDio = Dio(BaseOptions(baseUrl: ApiService.baseUrl));
+        final opts = err.requestOptions;
+        final response = await retryDio.request(
+          opts.path,
+          data: opts.data,
+          queryParameters: opts.queryParameters,
+          options: Options(method: opts.method, headers: opts.headers),
+        );
+        handler.resolve(response);
+        return;
+      } catch (_) {
+        // Refresh failed — surface a clean error
+        handler.reject(DioException(
+          requestOptions: err.requestOptions,
+          error: 'Gmail not connected. Please login from the home screen.',
+          type: DioExceptionType.badResponse,
+          response: err.response,
+        ));
+        return;
+      } finally {
+        _refreshing = false;
+      }
+    }
+    handler.next(err);
   }
 }

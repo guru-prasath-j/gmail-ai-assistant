@@ -7,13 +7,14 @@ from database import get_style_profile, save_email_reply
 router = APIRouter()
 
 OLLAMA_BASE = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
+OLLAMA_MODEL_LARGE = os.getenv("OLLAMA_MODEL_LARGE", "llama3.2")
 
 # ── Ollama helpers ────────────────────────────────────────────────────────────
 
-async def ollama_chat(system: str, user: str, temperature: float = 0.7) -> str:
+async def ollama_chat(system: str, user: str, temperature: float = 0.7, model: str = None) -> str:
     payload = {
-        "model": OLLAMA_MODEL,
+        "model": model or OLLAMA_MODEL,
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
@@ -22,13 +23,19 @@ async def ollama_chat(system: str, user: str, temperature: float = 0.7) -> str:
         "options": {"temperature": temperature},
     }
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=300.0) as client:
             r = await client.post(f"{OLLAMA_BASE}/api/chat", json=payload)
         if not r.is_success:
             raise HTTPException(500, f"Ollama error {r.status_code}: {r.text}")
         return r.json()["message"]["content"]
+    except HTTPException:
+        raise
     except httpx.ConnectError:
-        raise HTTPException(503, "Ollama not running. Start with: ollama serve")
+        raise HTTPException(503, f"Ollama not reachable at {OLLAMA_BASE}. Run: ollama serve")
+    except httpx.TimeoutException as e:
+        raise HTTPException(503, f"Ollama timed out — model may be loading, try again. ({type(e).__name__})")
+    except Exception as e:
+        raise HTTPException(503, f"Ollama request failed ({type(e).__name__}): {e!r}")
 
 async def ollama_generate(prompt: str, temperature: float = 0.7) -> str:
     payload = {
@@ -94,8 +101,8 @@ async def analyze_tone(req: AnalyzeRequest):
         raise HTTPException(400, "No samples provided")
 
     samples_text = "\n\n".join([
-        f"--- Email {i+1} (Subject: {s.get('subject','')}) ---\n{s.get('body','')[:500]}"
-        for i, s in enumerate(req.samples[:25])
+        f"--- Email {i+1} (Subject: {s.get('subject','')}) ---\n{s.get('body','')[:250]}"
+        for i, s in enumerate(req.samples[:10])
     ])
 
     system = """You are an expert linguistic analyst. Analyze email writing style.
@@ -159,7 +166,7 @@ Subject: {req.subject}
 
 {req.body[:1500]}"""
 
-    reply = await ollama_chat(system, user_msg, temperature=0.7)
+    reply = await ollama_chat(system, user_msg, temperature=0.7, model=OLLAMA_MODEL_LARGE)
 
     if req.save:
         save_email_reply(
@@ -197,7 +204,8 @@ Write ONLY the reply body. Sound natural, not like AI."""
     reply = await ollama_chat(
         system,
         f"Reply to:\nFrom: {req.sender}\nSubject: {req.subject}\n\n{req.body[:1500]}",
-        temperature=0.8
+        temperature=0.8,
+        model=OLLAMA_MODEL_LARGE,
     )
 
     from database import update_reply_status
