@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../services/api_service.dart';
 import '../theme.dart';
+import '../utils/theme_rebuild_mixin.dart';
+import '../widgets/email_body_view.dart';
 
 class EmailChatScreen extends StatefulWidget {
   final Map<String, dynamic> email;
@@ -12,11 +13,11 @@ class EmailChatScreen extends StatefulWidget {
   State<EmailChatScreen> createState() => _EmailChatScreenState();
 }
 
-class _EmailChatScreenState extends State<EmailChatScreen> {
+class _EmailChatScreenState extends State<EmailChatScreen> with ThemeRebuildMixin {
   String? _reply;
   bool _generating = false;
-  bool _editing = false;
-  bool _sending = false;
+  bool _editing    = false;
+  bool _sending    = false;
   late TextEditingController _editCtrl;
   final ScrollController _scrollCtrl = ScrollController();
 
@@ -113,7 +114,10 @@ class _EmailChatScreenState extends State<EmailChatScreen> {
 
   void _showSnack(String msg, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg, style: GoogleFonts.dmMono(fontSize: 12)), backgroundColor: color),
+      SnackBar(
+        content: Text(msg, style: AppTheme.ui(size: 13)),
+        backgroundColor: color,
+      ),
     );
   }
 
@@ -132,10 +136,11 @@ class _EmailChatScreenState extends State<EmailChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final email = widget.email;
-    final subject = email['subject'] ?? '(no subject)';
-    final from = email['from'] ?? '';
-    final body = (email['body'] as String? ?? '').isNotEmpty
+    final email    = widget.email;
+    final subject  = email['subject'] ?? '(no subject)';
+    final from     = email['from'] ?? '';
+    final bodyHtml = email['body_html'] as String? ?? '';
+    final bodyText = (email['body'] as String? ?? '').isNotEmpty
         ? email['body'] as String
         : email['snippet'] as String? ?? '';
     final date = email['date'] as String? ?? '';
@@ -147,8 +152,18 @@ class _EmailChatScreenState extends State<EmailChatScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(subject, style: GoogleFonts.dmMono(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textPrim), maxLines: 1, overflow: TextOverflow.ellipsis),
-          Text(_senderName(from), style: GoogleFonts.dmMono(fontSize: 10, color: AppTheme.textMute), maxLines: 1, overflow: TextOverflow.ellipsis),
+          Text(
+            subject,
+            style: AppTheme.ui(size: 13, weight: FontWeight.w700),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            _senderName(from),
+            style: AppTheme.ui(size: 10, color: AppTheme.textMute),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ]),
         actions: [
           if (_reply != null && !_generating)
@@ -159,29 +174,33 @@ class _EmailChatScreenState extends State<EmailChatScreen> {
             ),
         ],
       ),
-      body: Column(children: [
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: Column(children: [
         Expanded(
           child: ListView(
             controller: _scrollCtrl,
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             children: [
-              // ── Email received bubble ──────────────────────────
+              // ── Received email bubble ──────────────────────
               _ChatBubble(
                 isReceived: true,
                 initials: _senderInitials(from),
                 name: _senderName(from),
                 time: date.length > 16 ? date.substring(0, 16) : date,
-                child: SelectableText(
-                  body,
-                  style: GoogleFonts.dmMono(fontSize: 12.5, color: AppTheme.textPrim, height: 1.6),
+                child: EmailBodyView(
+                  htmlContent: bodyHtml,
+                  plainText: bodyText,
+                  emailId: email['id'] as String? ?? subject,
                 ),
               ),
 
               const SizedBox(height: 20),
 
-              // ── AI reply bubble or loading ─────────────────────
+              // ── AI reply bubble or typing indicator ────────
               if (_generating)
-                _TypingIndicator()
+                const _TypingIndicator()
               else if (_reply != null) ...[
                 _ChatBubble(
                   isReceived: false,
@@ -194,28 +213,36 @@ class _EmailChatScreenState extends State<EmailChatScreen> {
                           controller: _editCtrl,
                           maxLines: null,
                           autofocus: true,
-                          style: GoogleFonts.dmMono(fontSize: 12.5, color: AppTheme.textPrim, height: 1.6),
+                          // keep DM Mono for reply text
+                          style: AppTheme.mono(size: 12.5, height: 1.6),
                           decoration: InputDecoration(
                             filled: true,
                             fillColor: AppTheme.card,
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppTheme.border)),
-                            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppTheme.accent)),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(color: AppTheme.border),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: const BorderSide(color: AppTheme.accent, width: 1.5),
+                            ),
                             contentPadding: const EdgeInsets.all(10),
                           ),
                         )
                       : SelectableText(
                           _reply!,
-                          style: GoogleFonts.dmMono(fontSize: 12.5, color: AppTheme.textPrim, height: 1.6),
+                          // keep DM Mono for reply content
+                          style: AppTheme.mono(size: 12.5, height: 1.6),
                         ),
                 ),
                 const SizedBox(height: 8),
-                // copy button row
                 Row(mainAxisAlignment: MainAxisAlignment.end, children: [
                   _SmallButton(
                     icon: Icons.copy_rounded,
                     label: 'Copy',
                     onTap: () {
-                      Clipboard.setData(ClipboardData(text: _editing ? _editCtrl.text : _reply!));
+                      Clipboard.setData(
+                          ClipboardData(text: _editing ? _editCtrl.text : _reply!));
                       _showSnack('Copied!', AppTheme.green);
                     },
                   ),
@@ -227,7 +254,7 @@ class _EmailChatScreenState extends State<EmailChatScreen> {
           ),
         ),
 
-        // ── Bottom action bar ──────────────────────────────────────
+        // ── Bottom action bar ──────────────────────────────
         _BottomBar(
           hasReply: _reply != null,
           isGenerating: _generating,
@@ -241,6 +268,8 @@ class _EmailChatScreenState extends State<EmailChatScreen> {
           onSend: _send,
         ),
       ]),
+        ),
+      ),
     );
   }
 }
@@ -268,9 +297,11 @@ class _ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bubbleColor = isReceived ? AppTheme.surface : AppTheme.card;
-    final borderColor = isReceived ? AppTheme.border : (accentColor ?? AppTheme.accent).withValues(alpha: 0.35);
-    final avatarColor = isReceived ? AppTheme.purple : (accentColor ?? AppTheme.accent);
+    final bubbleColor  = isReceived ? AppTheme.surface : AppTheme.card;
+    final borderColor  = isReceived
+        ? AppTheme.border
+        : (accentColor ?? AppTheme.accent).withValues(alpha: 0.35);
+    final avatarColor  = isReceived ? AppTheme.purple : (accentColor ?? AppTheme.accent);
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -282,20 +313,31 @@ class _ChatBubble extends StatelessWidget {
         ],
         Flexible(
           child: Column(
-            crossAxisAlignment: isReceived ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+            crossAxisAlignment:
+                isReceived ? CrossAxisAlignment.start : CrossAxisAlignment.end,
             children: [
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: isReceived
                     ? [
-                        Text(name, style: GoogleFonts.dmMono(fontSize: 11, color: AppTheme.textSec, fontWeight: FontWeight.w600)),
+                        Text(name,
+                            style: AppTheme.ui(
+                                size: 11,
+                                weight: FontWeight.w600,
+                                color: AppTheme.textSec)),
                         const SizedBox(width: 8),
-                        Text(time, style: GoogleFonts.dmMono(fontSize: 10, color: AppTheme.textMute)),
+                        Text(time,
+                            style: AppTheme.ui(size: 10, color: AppTheme.textMute)),
                       ]
                     : [
-                        Text(time, style: GoogleFonts.dmMono(fontSize: 10, color: AppTheme.textMute)),
+                        Text(time,
+                            style: AppTheme.ui(size: 10, color: AppTheme.textMute)),
                         const SizedBox(width: 8),
-                        Text(name, style: GoogleFonts.dmMono(fontSize: 11, color: accentColor ?? AppTheme.accent, fontWeight: FontWeight.w600)),
+                        Text(name,
+                            style: AppTheme.ui(
+                                size: 11,
+                                weight: FontWeight.w600,
+                                color: accentColor ?? AppTheme.accent)),
                       ],
               ),
               const SizedBox(height: 6),
@@ -304,9 +346,9 @@ class _ChatBubble extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: bubbleColor,
                   borderRadius: BorderRadius.only(
-                    topLeft: isReceived ? Radius.zero : const Radius.circular(14),
-                    topRight: isReceived ? const Radius.circular(14) : Radius.zero,
-                    bottomLeft: const Radius.circular(14),
+                    topLeft:     isReceived ? Radius.zero : const Radius.circular(14),
+                    topRight:    isReceived ? const Radius.circular(14) : Radius.zero,
+                    bottomLeft:  const Radius.circular(14),
                     bottomRight: const Radius.circular(14),
                   ),
                   border: Border.all(color: borderColor),
@@ -335,26 +377,37 @@ class _Avatar extends StatelessWidget {
     return Container(
       width: 34,
       height: 34,
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.18), shape: BoxShape.circle, border: Border.all(color: color.withValues(alpha: 0.4))),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.18),
+        shape: BoxShape.circle,
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
       alignment: Alignment.center,
-      child: Text(initials, style: GoogleFonts.dmMono(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+      child: Text(
+        initials,
+        style: AppTheme.ui(size: 11, weight: FontWeight.w700, color: color),
+      ),
     );
   }
 }
 
 class _TypingIndicator extends StatefulWidget {
+  const _TypingIndicator();
+
   @override
   State<_TypingIndicator> createState() => _TypingIndicatorState();
 }
 
-class _TypingIndicatorState extends State<_TypingIndicator> with SingleTickerProviderStateMixin {
+class _TypingIndicatorState extends State<_TypingIndicator>
+    with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
   late Animation<double> _anim;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat(reverse: true);
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))
+      ..repeat(reverse: true);
     _anim = Tween(begin: 0.3, end: 1.0).animate(_ctrl);
   }
 
@@ -371,8 +424,8 @@ class _TypingIndicatorState extends State<_TypingIndicator> with SingleTickerPro
           decoration: BoxDecoration(
             color: AppTheme.card,
             borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(14),
-              bottomLeft: Radius.circular(14),
+              topLeft:     Radius.circular(14),
+              bottomLeft:  Radius.circular(14),
               bottomRight: Radius.circular(14),
             ),
             border: Border.all(color: AppTheme.accent.withValues(alpha: 0.3)),
@@ -382,7 +435,13 @@ class _TypingIndicatorState extends State<_TypingIndicator> with SingleTickerPro
             builder: (_, __) => Row(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.auto_awesome_rounded, size: 13, color: AppTheme.accent),
               const SizedBox(width: 8),
-              Opacity(opacity: _anim.value, child: Text('AI is writing...', style: GoogleFonts.dmMono(fontSize: 12, color: AppTheme.accent))),
+              Opacity(
+                opacity: _anim.value,
+                child: Text(
+                  'AI is writing...',
+                  style: AppTheme.ui(size: 12, color: AppTheme.accent),
+                ),
+              ),
             ]),
           ),
         ),
@@ -405,11 +464,15 @@ class _SmallButton extends StatelessWidget {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(color: AppTheme.surface, borderRadius: BorderRadius.circular(6), border: Border.all(color: AppTheme.border)),
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: AppTheme.border),
+        ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           Icon(icon, size: 12, color: AppTheme.textSec),
           const SizedBox(width: 5),
-          Text(label, style: GoogleFonts.dmMono(fontSize: 11, color: AppTheme.textSec)),
+          Text(label, style: AppTheme.ui(size: 11, color: AppTheme.textSec)),
         ]),
       ),
     );
@@ -433,41 +496,54 @@ class _BottomBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
-      decoration: const BoxDecoration(
+      padding: EdgeInsets.fromLTRB(
+          16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
+      decoration: BoxDecoration(
         color: AppTheme.surface,
         border: Border(top: BorderSide(color: AppTheme.border)),
       ),
       child: isGenerating
           ? Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent)),
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent),
+              ),
               const SizedBox(width: 12),
-              Text('Generating reply...', style: GoogleFonts.dmMono(fontSize: 12, color: AppTheme.textSec)),
+              Text('Generating reply...',
+                  style: AppTheme.ui(size: 12, color: AppTheme.textSec)),
             ])
           : !hasReply
               ? SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     icon: const Icon(Icons.auto_awesome_rounded, size: 16),
-                    label: Text('Generate AI Reply', style: GoogleFonts.dmMono(fontSize: 13, fontWeight: FontWeight.w600)),
+                    label: Text('Generate AI Reply',
+                        style: AppTheme.ui(size: 13, weight: FontWeight.w600, color: Colors.white)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.accent,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                     ),
                     onPressed: onGenerate,
                   ),
                 )
               : Row(children: [
                   OutlinedButton.icon(
-                    icon: Icon(isEditing ? Icons.check_rounded : Icons.edit_rounded, size: 15),
-                    label: Text(isEditing ? 'Done' : 'Edit', style: GoogleFonts.dmMono(fontSize: 12)),
+                    icon: Icon(
+                        isEditing ? Icons.check_rounded : Icons.edit_rounded,
+                        size: 15),
+                    label: Text(isEditing ? 'Done' : 'Edit',
+                        style: AppTheme.ui(size: 12)),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppTheme.textSec,
-                      side: const BorderSide(color: AppTheme.border),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      side: BorderSide(color: AppTheme.border),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
                     ),
                     onPressed: onToggleEdit,
                   ),
@@ -475,14 +551,26 @@ class _BottomBar extends StatelessWidget {
                   Expanded(
                     child: ElevatedButton.icon(
                       icon: isSending
-                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white),
+                            )
                           : const Icon(Icons.send_rounded, size: 15),
-                      label: Text(isSending ? 'Sending...' : 'Send Reply', style: GoogleFonts.dmMono(fontSize: 13, fontWeight: FontWeight.w600)),
+                      label: Text(
+                        isSending ? 'Sending...' : 'Send Reply',
+                        style: AppTheme.ui(
+                            size: 13,
+                            weight: FontWeight.w600,
+                            color: Colors.white),
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.accent,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 13),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
                       ),
                       onPressed: isSending ? null : onSend,
                     ),

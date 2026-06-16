@@ -24,10 +24,19 @@ class _GmailAIAppState extends State<GmailAIApp> {
   @override
   void initState() {
     super.initState();
+    themeNotifier.addListener(_onThemeChange);
     if (!kIsWeb) {
       _initDeepLinks();
     }
   }
+
+  @override
+  void dispose() {
+    themeNotifier.removeListener(_onThemeChange);
+    super.dispose();
+  }
+
+  void _onThemeChange() => setState(() {});
 
   void _initDeepLinks() async {
     try {
@@ -55,7 +64,9 @@ class _GmailAIAppState extends State<GmailAIApp> {
     return MaterialApp(
       navigatorKey: _navKey,
       title: 'Gmail AI',
-      theme: AppTheme.dark,
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: themeNotifier.mode,
       debugShowCheckedModeBanner: false,
       initialRoute: '/',
       routes: {

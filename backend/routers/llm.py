@@ -146,25 +146,52 @@ async def generate_reply(req: GenerateReplyRequest):
     profile = style["profile"]
     style_desc = json.dumps(profile, indent=2) if isinstance(profile, dict) else str(profile)
 
-    system = f"""You are an email assistant that writes replies mimicking a specific person's style exactly.
+    greetings  = profile.get("typical_greetings", ["Hi"])    if isinstance(profile, dict) else ["Hi"]
+    signoffs   = profile.get("typical_signoffs",  ["Best"])  if isinstance(profile, dict) else ["Best"]
+    tone       = profile.get("tone",       "professional")   if isinstance(profile, dict) else "professional"
+    warmth     = profile.get("warmth",     "neutral")        if isinstance(profile, dict) else "neutral"
+    sent_style = profile.get("sentence_style", "mixed")      if isinstance(profile, dict) else "mixed"
 
-STYLE PROFILE:
-{style_desc}
+    system = f"""You are ghostwriting an email reply for a person who RECEIVED an email and needs to respond to it.
 
-STRICT RULES:
-- Use their exact tone, vocabulary level, and sentence style
-- Use their typical greetings and sign-offs
-- Match their warmth level exactly
-- If they use emojis, use them. If not, don't.
-- Write ONLY the reply body. No subject line, no meta text.
-- Keep it natural — do NOT sound like AI"""
+Direction: the incoming email arrived IN their inbox. You write their reply BACK to the sender.
 
-    user_msg = f"""Write a reply to this email:
+THEIR WRITING STYLE:
+- Tone: {tone}, warmth: {warmth}, sentences: {sent_style}
+- Typical greetings: {", ".join(greetings)}
+- Typical sign-offs: {", ".join(signoffs)}
+- Full profile: {style_desc}
+
+HOW TO RESPOND — pick the action that fits:
+• Event/conference invite  → decide: express intent to register, say you'll look into it, or politely decline
+• Question directed at you → answer it clearly
+• Request or task          → agree, push back, or ask for details
+• Information/update       → acknowledge and react with your next step or opinion
+• Newsletter/promo         → brief, natural reaction (interested, not interested, already aware, etc.)
+
+HARD RULES:
+1. You are replying TO the sender — the greeting must address the SENDER, not the user.
+   The incoming email may say "Hi Narmatha" — that is how the sender greeted the user.
+   Your reply greeting must address the sender back (e.g. "Hi," / "Hi Team," / "Hello,").
+   NEVER use the user's own name as the greeting in their outgoing reply.
+2. You are replying TO the sender, not talking about them or their content.
+   WRONG: "Are you planning to attend MongoDB.local?"  ← asking the organiser about their own event
+   RIGHT:  "I'd love to join — submitting my registration now."
+3. Never open with "Thank you for your email / I received your message."
+4. Never repeat or paraphrase what the email said.
+5. Use a greeting that addresses the sender, and the person's typical sign-off.
+6. Output ONLY the reply body. No subject line, no labels, no meta commentary."""
+
+    user_msg = f"""The user received this email and needs to write a reply back to the sender.
 
 From: {req.sender}
 Subject: {req.subject}
 
-{req.body[:1500]}"""
+--- INCOMING EMAIL ---
+{req.body[:1500]}
+--- END ---
+
+Write the user's reply to {req.sender}. Address the sender in the greeting, not the user's own name. Be direct and concrete."""
 
     reply = await ollama_chat(system, user_msg, temperature=0.7, model=OLLAMA_MODEL_LARGE)
 
@@ -191,19 +218,46 @@ async def regenerate_reply(req: RegenerateRequest):
     profile = style["profile"]
     style_desc = json.dumps(profile, indent=2) if isinstance(profile, dict) else str(profile)
 
-    instruction_part = f"\n\nADDITIONAL INSTRUCTION: {req.instruction}" if req.instruction else ""
+    greetings  = profile.get("typical_greetings", ["Hi"])    if isinstance(profile, dict) else ["Hi"]
+    signoffs   = profile.get("typical_signoffs",  ["Best"])  if isinstance(profile, dict) else ["Best"]
+    tone       = profile.get("tone",       "professional")   if isinstance(profile, dict) else "professional"
+    warmth     = profile.get("warmth",     "neutral")        if isinstance(profile, dict) else "neutral"
 
-    system = f"""You are an email assistant mimicking a specific person's writing style.
+    instruction_part = f"\n\nSPECIAL INSTRUCTION FOR THIS VERSION: {req.instruction}" if req.instruction else ""
 
-STYLE PROFILE:
-{style_desc}
-{instruction_part}
+    system = f"""You are ghostwriting an email reply for a person who RECEIVED an email and needs to respond to it.{instruction_part}
 
-Write ONLY the reply body. Sound natural, not like AI."""
+Direction: the incoming email arrived IN their inbox. You write their reply BACK to the sender.
+
+THEIR WRITING STYLE:
+- Tone: {tone}, warmth: {warmth}
+- Typical greetings: {", ".join(greetings)}
+- Typical sign-offs: {", ".join(signoffs)}
+- Full profile: {style_desc}
+
+HOW TO RESPOND — pick the action that fits:
+• Event/conference invite  → decide: express intent to register, say you'll look into it, or politely decline
+• Question directed at you → answer it clearly
+• Request or task          → agree, push back, or ask for details
+• Information/update       → acknowledge and react with your next step or opinion
+• Newsletter/promo         → brief, natural reaction (interested, not interested, already aware, etc.)
+
+HARD RULES:
+1. The greeting must address the SENDER, not the user.
+   The incoming email may say "Hi Narmatha" — that is how the sender greeted the user.
+   Your reply must greet the sender back (e.g. "Hi," / "Hi Team," / "Hello,").
+   NEVER use the user's own name in the greeting of their outgoing reply.
+2. You are replying TO the sender, not talking about them or their content.
+   WRONG: "Are you planning to attend the event?"  ← asking the organiser about their own event
+   RIGHT:  "Sounds great — I'll register before the deadline."
+3. Never open with "Thank you for your email / I received your message."
+4. Never repeat or paraphrase what the email said.
+5. Use a greeting that addresses the sender, and the user's typical sign-off.
+6. Output ONLY the reply body. No subject line, no labels, no meta commentary."""
 
     reply = await ollama_chat(
         system,
-        f"Reply to:\nFrom: {req.sender}\nSubject: {req.subject}\n\n{req.body[:1500]}",
+        f"The user received this email and needs to write a reply back to the sender.\n\nFrom: {req.sender}\nSubject: {req.subject}\n\n--- INCOMING EMAIL ---\n{req.body[:1500]}\n--- END ---\n\nWrite the user's reply to {req.sender}. Be direct and concrete.",
         temperature=0.8,
         model=OLLAMA_MODEL_LARGE,
     )

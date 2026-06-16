@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
-import httpx, base64, email as email_lib
+import httpx, base64, email as email_lib, re, html as html_lib
+from html.parser import HTMLParser
 from database import get_tokens, save_email_reply, update_reply_status, get_all_replies
 
 router = APIRouter()
@@ -36,18 +37,151 @@ def decode_b64(s: str) -> str:
     except Exception:
         return ""
 
-def extract_body(payload: dict) -> str:
+class _HTMLStripper(HTMLParser):
+    """Extracts visible text from HTML.
+
+    Skips:
+    - <script>, <style>, <head>, <noscript> tags (and their content)
+    - Any element with style containing display:none or max-height:0
+    """
+
+    # Tags that generate no closing tag in HTML5
+    _VOID = {"area","base","br","col","embed","hr","img",
+             "input","link","meta","param","source","track","wbr"}
+    # Tags that introduce a line break in plain text
+    _BLOCK = {"p","div","tr","li","h1","h2","h3","h4","h5","h6",
+              "table","ul","ol","blockquote","section","article","header","footer"}
+    _ALWAYS_SKIP = {"script","style","head","noscript"}
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self._parts: list[str] = []
+        self._skip_depth = 0   # >0 means we are inside an invisible/skip zone
+
+    @staticmethod
+    def _is_invisible(attrs_list) -> bool:
+        for name, value in (attrs_list or []):
+            if name == "style" and value:
+                if re.search(r"display\s*:\s*none", value, re.IGNORECASE):
+                    return True
+                if re.search(r"max-height\s*:\s*0+\s*(px)?[^0-9]", value, re.IGNORECASE):
+                    return True
+                if re.search(r"visibility\s*:\s*hidden", value, re.IGNORECASE):
+                    return True
+        return False
+
+    def handle_starttag(self, tag, attrs):
+        tag_l = tag.lower()
+        is_void = tag_l in self._VOID
+
+        # Already inside a skip zone — count depth but don't emit
+        if self._skip_depth > 0:
+            if not is_void:
+                self._skip_depth += 1
+            return
+
+        # Should this element be skipped?
+        if tag_l in self._ALWAYS_SKIP or self._is_invisible(attrs):
+            if not is_void:
+                self._skip_depth += 1
+            return
+
+        # Visible element — emit a newline for block-level tags
+        if tag_l in self._BLOCK:
+            self._parts.append("\n")
+        elif tag_l == "br":
+            self._parts.append("\n")
+
+    def handle_endtag(self, tag):
+        if self._skip_depth > 0:
+            self._skip_depth -= 1
+
+    def handle_data(self, data):
+        if self._skip_depth == 0:
+            self._parts.append(data)
+
+    def get_text(self) -> str:
+        text = "".join(self._parts)
+        # Collapse runs of spaces/tabs; normalise excess newlines
+        text = re.sub(r"[ \t]+", " ", text)
+        text = re.sub(r" *\n *", "\n", text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text.strip()
+
+
+def strip_html(html: str) -> str:
+    stripper = _HTMLStripper()
+    try:
+        stripper.feed(html)
+    except Exception:
+        # Malformed HTML fallback
+        plain = re.sub(r"<[^>]+>", " ", html)
+        return html_lib.unescape(plain).strip()
+    text = stripper.get_text()
+    # If stripping produced almost nothing, the email was image-only or tracking-only
+    return text if len(text) > 10 else ""
+
+
+def extract_body_html(payload: dict) -> str:
+    """Return the raw HTML body for display (prefer text/html part)."""
     if not payload:
         return ""
-    if payload.get("body", {}).get("data"):
-        return decode_b64(payload["body"]["data"])
-    for part in payload.get("parts", []):
-        if part.get("mimeType") == "text/plain" and part.get("body", {}).get("data"):
-            return decode_b64(part["body"]["data"])
-    for part in payload.get("parts", []):
-        result = extract_body(part)
-        if result:
-            return result
+    mime = payload.get("mimeType", "")
+    parts = payload.get("parts", [])
+    if parts:
+        for part in parts:
+            if part.get("mimeType") == "text/html" and part.get("body", {}).get("data"):
+                return decode_b64(part["body"]["data"])
+        for part in parts:
+            result = extract_body_html(part)
+            if result:
+                return result
+    if mime == "text/html":
+        data = payload.get("body", {}).get("data")
+        if data:
+            return decode_b64(data)
+    return ""
+
+
+def extract_body(payload: dict) -> str:
+    """Extract plain-text body from a Gmail message payload.
+
+    Priority order:
+      1. text/plain part (any depth)
+      2. text/html part stripped to plain text
+    """
+    if not payload:
+        return ""
+
+    mime = payload.get("mimeType", "")
+
+    # Direct text/plain — best case
+    if mime == "text/plain":
+        data = payload.get("body", {}).get("data")
+        if data:
+            return decode_b64(data)
+
+    # Recurse into multipart children, preferring plain text
+    parts = payload.get("parts", [])
+    if parts:
+        # First pass: plain text
+        for part in parts:
+            if part.get("mimeType") == "text/plain" and part.get("body", {}).get("data"):
+                return decode_b64(part["body"]["data"])
+        # Second pass: recurse (handles nested multipart/alternative etc.)
+        for part in parts:
+            result = extract_body(part)
+            if result:
+                return result
+
+    # Fallback: top-level body data — strip HTML if needed
+    data = payload.get("body", {}).get("data")
+    if data:
+        raw = decode_b64(data)
+        if mime == "text/html" or raw.lstrip().startswith("<"):
+            return strip_html(raw)
+        return raw
+
     return ""
 
 def get_header(headers: list, name: str) -> str:
@@ -91,7 +225,8 @@ async def get_inbox(max_results: int = 20, unread_only: bool = True):
             "to": get_header(headers, "to"),
             "date": get_header(headers, "date"),
             "snippet": detail.get("snippet", ""),
-            "body": extract_body(detail.get("payload", {}))[:3000],
+            "body": extract_body(detail.get("payload", {}))[:3000] or detail.get("snippet", ""),
+            "body_html": extract_body_html(detail.get("payload", {})),
             "unread": "UNREAD" in detail.get("labelIds", []),
         }
 

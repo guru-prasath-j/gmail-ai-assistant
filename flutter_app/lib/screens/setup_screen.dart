@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
 import '../theme.dart';
+import '../utils/theme_rebuild_mixin.dart';
 
 class SetupScreen extends StatefulWidget {
   const SetupScreen({super.key});
@@ -10,9 +10,9 @@ class SetupScreen extends StatefulWidget {
   State<SetupScreen> createState() => _SetupScreenState();
 }
 
-class _SetupScreenState extends State<SetupScreen> {
+class _SetupScreenState extends State<SetupScreen> with ThemeRebuildMixin {
   int _step = 0; // 0: connect, 1: train, 2: done
-  bool _loading = false;
+  bool _loading   = false;
   bool _analyzing = false;
   bool _authenticated = false;
   List<Map<String, dynamic>> _emails = [];
@@ -67,12 +67,15 @@ class _SetupScreenState extends State<SetupScreen> {
     try {
       final samples = _emails.map((e) => {
         'subject': e['subject']?.toString() ?? '',
-        'body': e['body']?.toString() ?? e['snippet']?.toString() ?? '',
+        'body':    e['body']?.toString() ?? e['snippet']?.toString() ?? '',
       }).toList();
       await ApiService.analyzeTone(samples);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Style profile created successfully!'), backgroundColor: AppTheme.green),
+          const SnackBar(
+            content: Text('Style profile created successfully!'),
+            backgroundColor: AppTheme.green,
+          ),
         );
         Navigator.pop(context);
       }
@@ -86,19 +89,32 @@ class _SetupScreenState extends State<SetupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Setup', style: GoogleFonts.dmMono())),
+      appBar: AppBar(
+        title: Text('Setup', style: AppTheme.ui(size: 16, weight: FontWeight.w700)),
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(padding: const EdgeInsets.all(24), children: [
               _StepBar(step: _step),
               const SizedBox(height: 32),
               if (_error != null) _ErrorBox(message: _error!),
-              if (_step == 0) _ConnectStep(onConnect: _connectGmail, onCheckAgain: _checkAuth),
-              if (_step == 1) _TrainStep(emails: _emails, analyzing: _analyzing, onAnalyze: _analyzeStyle, onRefetch: _fetchEmails),
+              if (_step == 0)
+                _ConnectStep(onConnect: _connectGmail, onCheckAgain: _checkAuth),
+              if (_step == 1)
+                _TrainStep(
+                  emails: _emails,
+                  analyzing: _analyzing,
+                  onAnalyze: _analyzeStyle,
+                  onRefetch: _fetchEmails,
+                ),
             ]),
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────
+// Step: Connect Gmail
+// ─────────────────────────────────────────────────────────────
 
 class _ConnectStep extends StatelessWidget {
   final VoidCallback onConnect, onCheckAgain;
@@ -107,16 +123,26 @@ class _ConnectStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('Connect Gmail', style: GoogleFonts.dmMono(fontSize: 20, fontWeight: FontWeight.w700, color: AppTheme.textPrim)),
+      Text('Connect Gmail', style: AppTheme.ui(size: 20, weight: FontWeight.w700)),
       const SizedBox(height: 8),
-      Text('Sign in with your Google account so we can read your emails and learn your writing style.', style: GoogleFonts.dmMono(fontSize: 13, color: AppTheme.textSec, height: 1.6)),
+      Text(
+        'Sign in with your Google account so we can read your emails and learn your writing style.',
+        style: AppTheme.ui(size: 13, color: AppTheme.textSec, height: 1.6),
+      ),
       const SizedBox(height: 32),
       SizedBox(
         width: double.infinity,
         child: ElevatedButton.icon(
           icon: const Icon(Icons.login_rounded),
-          label: Text('Open Google Sign-In', style: GoogleFonts.dmMono(fontSize: 14, color: Colors.white)),
-          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accent, padding: const EdgeInsets.symmetric(vertical: 16)),
+          label: Text(
+            'Open Google Sign-In',
+            style: AppTheme.ui(size: 14, weight: FontWeight.w600, color: Colors.white),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.accent,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
           onPressed: onConnect,
         ),
       ),
@@ -125,40 +151,70 @@ class _ConnectStep extends StatelessWidget {
         width: double.infinity,
         child: TextButton(
           onPressed: onCheckAgain,
-          child: Text('I already signed in — check again', style: GoogleFonts.dmMono(fontSize: 12, color: AppTheme.textMute)),
+          child: Text(
+            'I already signed in — check again',
+            style: AppTheme.ui(size: 12, color: AppTheme.textMute),
+          ),
         ),
       ),
     ]);
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// Step: Train style
+// ─────────────────────────────────────────────────────────────
+
 class _TrainStep extends StatelessWidget {
   final List<Map<String, dynamic>> emails;
   final bool analyzing;
   final VoidCallback onAnalyze, onRefetch;
-  const _TrainStep({required this.emails, required this.analyzing, required this.onAnalyze, required this.onRefetch});
+  const _TrainStep({
+    required this.emails,
+    required this.analyzing,
+    required this.onAnalyze,
+    required this.onRefetch,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('Train Your Style', style: GoogleFonts.dmMono(fontSize: 20, fontWeight: FontWeight.w700, color: AppTheme.textPrim)),
+      Text('Train Your Style', style: AppTheme.ui(size: 20, weight: FontWeight.w700)),
       const SizedBox(height: 8),
-      Text('We found ${emails.length} emails. The AI will analyze them to learn your writing tone, vocabulary, and style.', style: GoogleFonts.dmMono(fontSize: 13, color: AppTheme.textSec, height: 1.6)),
+      Text(
+        'We found ${emails.length} emails. The AI will analyze them to learn your writing tone, vocabulary, and style.',
+        style: AppTheme.ui(size: 13, color: AppTheme.textSec, height: 1.6),
+      ),
       const SizedBox(height: 20),
 
-      // Sample preview
-      Text('SAMPLE EMAILS', style: GoogleFonts.dmMono(fontSize: 10, color: AppTheme.textMute, letterSpacing: 1.5)),
+      Text('SAMPLE EMAILS',
+          style: AppTheme.ui(size: 10, weight: FontWeight.w700, color: AppTheme.textMute, letterSpacing: 1.4)),
       const SizedBox(height: 10),
+
       ...emails.take(6).map((e) => Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(color: AppTheme.card, borderRadius: BorderRadius.circular(10), border: Border.all(color: AppTheme.border)),
+        decoration: BoxDecoration(
+          color: AppTheme.card,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppTheme.border),
+        ),
         child: Row(children: [
-          const Icon(Icons.email_outlined, size: 14, color: AppTheme.textMute),
+          Icon(Icons.email_outlined, size: 14, color: AppTheme.textMute),
           const SizedBox(width: 10),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(e['subject'] ?? '(no subject)', style: GoogleFonts.dmMono(fontSize: 12, color: AppTheme.textPrim, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
-            Text(e['from'] ?? '', style: GoogleFonts.dmMono(fontSize: 10, color: AppTheme.textMute), maxLines: 1, overflow: TextOverflow.ellipsis),
+            Text(
+              e['subject'] ?? '(no subject)',
+              style: AppTheme.ui(size: 12, weight: FontWeight.w500),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              e['from'] ?? '',
+              style: AppTheme.ui(size: 10, color: AppTheme.textMute),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ])),
         ]),
       )),
@@ -166,7 +222,10 @@ class _TrainStep extends StatelessWidget {
       if (emails.length > 6)
         Padding(
           padding: const EdgeInsets.only(bottom: 16),
-          child: Text('+ ${emails.length - 6} more emails included in training', style: GoogleFonts.dmMono(fontSize: 11, color: AppTheme.textMute)),
+          child: Text(
+            '+ ${emails.length - 6} more emails included in training',
+            style: AppTheme.ui(size: 11, color: AppTheme.textMute),
+          ),
         ),
 
       const SizedBox(height: 20),
@@ -175,9 +234,11 @@ class _TrainStep extends StatelessWidget {
         Center(child: Column(children: [
           const CircularProgressIndicator(color: AppTheme.accent),
           const SizedBox(height: 16),
-          Text('Analyzing writing style...', style: GoogleFonts.dmMono(fontSize: 13, color: AppTheme.textSec)),
+          Text('Analyzing writing style...',
+              style: AppTheme.ui(size: 13, color: AppTheme.textSec)),
           const SizedBox(height: 4),
-          Text('This may take a minute', style: GoogleFonts.dmMono(fontSize: 11, color: AppTheme.textMute)),
+          Text('This may take a minute',
+              style: AppTheme.ui(size: 11, color: AppTheme.textMute)),
         ]))
       else
         Column(children: [
@@ -185,8 +246,15 @@ class _TrainStep extends StatelessWidget {
             width: double.infinity,
             child: ElevatedButton.icon(
               icon: const Icon(Icons.auto_awesome_rounded, size: 16),
-              label: Text('Analyze My Writing Style', style: GoogleFonts.dmMono(fontSize: 14, color: Colors.white)),
-              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accent, padding: const EdgeInsets.symmetric(vertical: 16)),
+              label: Text(
+                'Analyze My Writing Style',
+                style: AppTheme.ui(size: 14, weight: FontWeight.w600, color: Colors.white),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.accent,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
               onPressed: onAnalyze,
             ),
           ),
@@ -194,8 +262,9 @@ class _TrainStep extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: TextButton.icon(
-              icon: const Icon(Icons.refresh_rounded, size: 14, color: AppTheme.textMute),
-              label: Text('Refresh emails', style: GoogleFonts.dmMono(fontSize: 12, color: AppTheme.textMute)),
+              icon: Icon(Icons.refresh_rounded, size: 14, color: AppTheme.textMute),
+              label: Text('Refresh emails',
+                  style: AppTheme.ui(size: 12, color: AppTheme.textMute)),
               onPressed: onRefetch,
             ),
           ),
@@ -203,6 +272,10 @@ class _TrainStep extends StatelessWidget {
     ]);
   }
 }
+
+// ─────────────────────────────────────────────────────────────
+// Step progress bar
+// ─────────────────────────────────────────────────────────────
 
 class _StepBar extends StatelessWidget {
   final int step;
@@ -212,9 +285,21 @@ class _StepBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(children: [
       _StepDot(n: 1, label: 'Connect', done: step > 0, active: step == 0),
-      Expanded(child: Container(height: 1, color: step > 0 ? AppTheme.green : AppTheme.border, margin: const EdgeInsets.only(bottom: 18))),
+      Expanded(
+        child: Container(
+          height: 1,
+          color: step > 0 ? AppTheme.green : AppTheme.border,
+          margin: const EdgeInsets.only(bottom: 18),
+        ),
+      ),
       _StepDot(n: 2, label: 'Train', done: step > 1, active: step == 1),
-      Expanded(child: Container(height: 1, color: step > 1 ? AppTheme.green : AppTheme.border, margin: const EdgeInsets.only(bottom: 18))),
+      Expanded(
+        child: Container(
+          height: 1,
+          color: step > 1 ? AppTheme.green : AppTheme.border,
+          margin: const EdgeInsets.only(bottom: 18),
+        ),
+      ),
       _StepDot(n: 3, label: 'Done', done: step > 2, active: step == 2),
     ]);
   }
@@ -231,17 +316,42 @@ class _StepDot extends StatelessWidget {
     final color = done ? AppTheme.green : active ? AppTheme.accent : AppTheme.border;
     return Column(children: [
       Container(
-        width: 28, height: 28,
-        decoration: BoxDecoration(color: (done || active) ? color : AppTheme.surface, shape: BoxShape.circle, border: Border.all(color: color)),
-        child: Center(child: done
-            ? const Icon(Icons.check_rounded, size: 14, color: Colors.white)
-            : Text('$n', style: GoogleFonts.dmMono(fontSize: 12, color: active ? Colors.white : AppTheme.textMute))),
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          color: (done || active) ? color : AppTheme.surface,
+          shape: BoxShape.circle,
+          border: Border.all(color: color, width: 1.5),
+        ),
+        child: Center(
+          child: done
+              ? const Icon(Icons.check_rounded, size: 14, color: Colors.white)
+              : Text(
+                  '$n',
+                  style: AppTheme.ui(
+                    size: 12,
+                    weight: FontWeight.w700,
+                    color: active ? Colors.white : AppTheme.textMute,
+                  ),
+                ),
+        ),
       ),
       const SizedBox(height: 4),
-      Text(label, style: GoogleFonts.dmMono(fontSize: 10, color: active ? AppTheme.textPrim : AppTheme.textMute)),
+      Text(
+        label,
+        style: AppTheme.ui(
+          size: 10,
+          weight: FontWeight.w600,
+          color: active ? AppTheme.textPrim : AppTheme.textMute,
+        ),
+      ),
     ]);
   }
 }
+
+// ─────────────────────────────────────────────────────────────
+// Error box
+// ─────────────────────────────────────────────────────────────
 
 class _ErrorBox extends StatelessWidget {
   final String message;
@@ -252,11 +362,15 @@ class _ErrorBox extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: AppTheme.red.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10), border: Border.all(color: AppTheme.red.withValues(alpha: 0.3))),
+      decoration: BoxDecoration(
+        color: AppTheme.red.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.red.withValues(alpha: 0.3)),
+      ),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Icon(Icons.error_outline_rounded, color: AppTheme.red, size: 16),
         const SizedBox(width: 8),
-        Expanded(child: Text(message, style: GoogleFonts.dmMono(fontSize: 12, color: AppTheme.red))),
+        Expanded(child: Text(message, style: AppTheme.ui(size: 12, color: AppTheme.red))),
       ]),
     );
   }

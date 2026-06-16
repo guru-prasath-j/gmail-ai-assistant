@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../services/api_service.dart';
 import '../theme.dart';
+import '../utils/theme_rebuild_mixin.dart';
 
 class RepliesScreen extends StatefulWidget {
   const RepliesScreen({super.key});
@@ -9,7 +9,7 @@ class RepliesScreen extends StatefulWidget {
   State<RepliesScreen> createState() => _RepliesScreenState();
 }
 
-class _RepliesScreenState extends State<RepliesScreen> with SingleTickerProviderStateMixin {
+class _RepliesScreenState extends State<RepliesScreen> with SingleTickerProviderStateMixin, ThemeRebuildMixin {
   late TabController _tabs;
   List<Map<String, dynamic>> _replies = [];
   bool _loading = true;
@@ -34,25 +34,21 @@ class _RepliesScreenState extends State<RepliesScreen> with SingleTickerProvider
     }
   }
 
-  List<Map<String, dynamic>> _filter(String status) => _replies.where((r) => r['status'] == status).toList();
+  List<Map<String, dynamic>> _filter(String status) =>
+      _replies.where((r) => r['status'] == status).toList();
 
   @override
   Widget build(BuildContext context) {
-    final pending = _filter('pending');
-    final sent = _filter('sent');
+    final pending  = _filter('pending');
+    final sent     = _filter('sent');
     final rejected = _filter('rejected');
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Replies', style: GoogleFonts.dmMono()),
+        title: Text('Replies', style: AppTheme.ui(size: 16, weight: FontWeight.w700)),
         actions: [IconButton(icon: const Icon(Icons.refresh_rounded), onPressed: _load)],
         bottom: TabBar(
           controller: _tabs,
-          indicatorColor: AppTheme.accent,
-          labelColor: AppTheme.textPrim,
-          unselectedLabelColor: AppTheme.textMute,
-          labelStyle: GoogleFonts.dmMono(fontSize: 12),
-          unselectedLabelStyle: GoogleFonts.dmMono(fontSize: 12),
           tabs: [
             Tab(text: 'Pending (${pending.length})'),
             Tab(text: 'Sent (${sent.length})'),
@@ -65,8 +61,8 @@ class _RepliesScreenState extends State<RepliesScreen> with SingleTickerProvider
           : TabBarView(
               controller: _tabs,
               children: [
-                _ReplyList(replies: pending, showActions: true, onRefresh: _load),
-                _ReplyList(replies: sent, showActions: false, onRefresh: _load),
+                _ReplyList(replies: pending,  showActions: true,  onRefresh: _load),
+                _ReplyList(replies: sent,     showActions: false, onRefresh: _load),
                 _ReplyList(replies: rejected, showActions: false, onRefresh: _load),
               ],
             ),
@@ -84,9 +80,9 @@ class _ReplyList extends StatelessWidget {
   Widget build(BuildContext context) {
     if (replies.isEmpty) {
       return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        const Icon(Icons.inbox_outlined, size: 40, color: AppTheme.textMute),
+        Icon(Icons.inbox_outlined, size: 40, color: AppTheme.textMute),
         const SizedBox(height: 12),
-        Text('Nothing here yet', style: GoogleFonts.dmMono(color: AppTheme.textMute, fontSize: 13)),
+        Text('Nothing here yet', style: AppTheme.ui(size: 13, color: AppTheme.textMute)),
       ]));
     }
     return RefreshIndicator(
@@ -95,7 +91,11 @@ class _ReplyList extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         itemCount: replies.length,
         separatorBuilder: (_, __) => const SizedBox(height: 10),
-        itemBuilder: (_, i) => _ReplyCard(reply: replies[i], showActions: showActions, onRefresh: onRefresh),
+        itemBuilder: (_, i) => _ReplyCard(
+          reply: replies[i],
+          showActions: showActions,
+          onRefresh: onRefresh,
+        ),
       ),
     );
   }
@@ -113,8 +113,8 @@ class _ReplyCard extends StatefulWidget {
 
 class _ReplyCardState extends State<_ReplyCard> {
   bool _expanded = false;
-  bool _sending = false;
-  bool _editing = false;
+  bool _sending  = false;
+  bool _editing  = false;
   late TextEditingController _ctrl;
 
   @override
@@ -137,9 +137,17 @@ class _ReplyCardState extends State<_ReplyCard> {
         replyBody: _ctrl.text,
       );
       widget.onRefresh();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Reply sent!'), backgroundColor: AppTheme.green));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Reply sent!'), backgroundColor: AppTheme.green),
+        );
+      }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e'), backgroundColor: AppTheme.red));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed: $e'), backgroundColor: AppTheme.red),
+        );
+      }
     } finally {
       setState(() => _sending = false);
     }
@@ -153,102 +161,175 @@ class _ReplyCardState extends State<_ReplyCard> {
   @override
   Widget build(BuildContext context) {
     final status = widget.reply['status'] as String? ?? 'pending';
-    final statusColor = {'sent': AppTheme.green, 'rejected': AppTheme.red, 'pending': AppTheme.accent}[status] ?? AppTheme.border;
-    final date = (widget.reply['created_at'] as String? ?? '');
+    final statusColor = {
+      'sent':     AppTheme.green,
+      'rejected': AppTheme.red,
+      'pending':  AppTheme.accent,
+    }[status] ?? AppTheme.border;
+    final date = widget.reply['created_at'] as String? ?? '';
     final shortDate = date.length >= 10 ? date.substring(0, 10) : date;
 
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: statusColor.withOpacity(0.25)),
+        border: Border.all(color: statusColor.withValues(alpha: 0.25)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // Header
+
+        // ── Header ─────────────────────────────────────────
         Padding(
           padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(color: statusColor.withOpacity(0.12), borderRadius: BorderRadius.circular(6), border: Border.all(color: statusColor.withOpacity(0.4))),
-                child: Text(status.toUpperCase(), style: GoogleFonts.dmMono(fontSize: 9, color: statusColor, letterSpacing: 1)),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: statusColor.withValues(alpha: 0.4)),
+                ),
+                child: Text(
+                  status.toUpperCase(),
+                  style: AppTheme.ui(
+                    size: 9,
+                    weight: FontWeight.w700,
+                    color: statusColor,
+                    letterSpacing: 1.0,
+                  ),
+                ),
               ),
               const Spacer(),
-              Text(shortDate, style: GoogleFonts.dmMono(fontSize: 10, color: AppTheme.textMute)),
+              Text(shortDate, style: AppTheme.ui(size: 10, color: AppTheme.textMute)),
             ]),
             const SizedBox(height: 10),
-            Text(widget.reply['subject'] ?? '(no subject)', style: GoogleFonts.dmMono(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrim), maxLines: 1, overflow: TextOverflow.ellipsis),
+            Text(
+              widget.reply['subject'] ?? '(no subject)',
+              style: AppTheme.ui(size: 13, weight: FontWeight.w600),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             const SizedBox(height: 3),
-            Text('From: ${widget.reply['sender'] ?? ''}', style: GoogleFonts.dmMono(fontSize: 11, color: AppTheme.textSec), maxLines: 1, overflow: TextOverflow.ellipsis),
+            Text(
+              'From: ${widget.reply['sender'] ?? ''}',
+              style: AppTheme.ui(size: 11, color: AppTheme.textSec),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ]),
         ),
 
-        // Generated reply
+        // ── AI reply preview ────────────────────────────────
         if (widget.reply['generated_reply'] != null) ...[
-          const Divider(height: 1, color: AppTheme.border),
+          Divider(height: 1, color: AppTheme.border),
           InkWell(
             onTap: () => setState(() => _expanded = !_expanded),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
-                  Text('AI REPLY', style: GoogleFonts.dmMono(fontSize: 9, color: AppTheme.textMute, letterSpacing: 1)),
+                  Text(
+                    'AI REPLY',
+                    style: AppTheme.ui(
+                      size: 9,
+                      weight: FontWeight.w700,
+                      color: AppTheme.textMute,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
                   const Spacer(),
                   if (widget.showActions && _expanded)
                     GestureDetector(
                       onTap: () => setState(() => _editing = !_editing),
                       child: Row(children: [
-                        Icon(_editing ? Icons.check_rounded : Icons.edit_rounded, size: 12, color: AppTheme.textMute),
+                        Icon(
+                          _editing ? Icons.check_rounded : Icons.edit_rounded,
+                          size: 12,
+                          color: AppTheme.textMute,
+                        ),
                         const SizedBox(width: 4),
-                        Text(_editing ? 'Done' : 'Edit', style: GoogleFonts.dmMono(fontSize: 10, color: AppTheme.textMute)),
+                        Text(
+                          _editing ? 'Done' : 'Edit',
+                          style: AppTheme.ui(size: 10, color: AppTheme.textMute),
+                        ),
                         const SizedBox(width: 8),
                       ]),
                     ),
-                  Icon(_expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded, size: 16, color: AppTheme.textMute),
+                  Icon(
+                    _expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                    size: 16,
+                    color: AppTheme.textMute,
+                  ),
                 ]),
                 const SizedBox(height: 8),
                 if (_expanded && _editing)
                   TextField(
                     controller: _ctrl,
                     maxLines: null,
-                    style: GoogleFonts.dmMono(fontSize: 12, color: AppTheme.textPrim, height: 1.5),
+                    style: AppTheme.mono(size: 12, height: 1.5),
                     decoration: InputDecoration(
-                      filled: true, fillColor: AppTheme.card, isDense: true,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppTheme.border)),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppTheme.accent)),
+                      filled: true,
+                      fillColor: AppTheme.card,
+                      isDense: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: AppTheme.border),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: AppTheme.accent, width: 1.5),
+                      ),
                     ),
                   )
                 else
-                  Text(widget.reply['generated_reply'] ?? '', style: GoogleFonts.dmMono(fontSize: 12, color: AppTheme.textSec, height: 1.5), maxLines: _expanded ? null : 3, overflow: _expanded ? TextOverflow.visible : TextOverflow.ellipsis),
+                  Text(
+                    widget.reply['generated_reply'] ?? '',
+                    style: AppTheme.mono(size: 12, color: AppTheme.textSec, height: 1.5),
+                    maxLines: _expanded ? null : 3,
+                    overflow: _expanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                  ),
               ]),
             ),
           ),
         ],
 
-        // Action buttons
+        // ── Action buttons ──────────────────────────────────
         if (widget.showActions) ...[
-          const Divider(height: 1, color: AppTheme.border),
+          Divider(height: 1, color: AppTheme.border),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             child: Row(children: [
               TextButton.icon(
                 icon: const Icon(Icons.close_rounded, size: 14),
-                label: Text('Reject', style: GoogleFonts.dmMono(fontSize: 11)),
-                style: TextButton.styleFrom(foregroundColor: AppTheme.red, minimumSize: Size.zero, padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
+                label: Text('Reject', style: AppTheme.ui(size: 11)),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.red,
+                  minimumSize: Size.zero,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                ),
                 onPressed: _reject,
               ),
               const Spacer(),
               _sending
                   ? Row(children: [
-                      const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent)),
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent),
+                      ),
                       const SizedBox(width: 8),
-                      Text('Sending...', style: GoogleFonts.dmMono(fontSize: 11, color: AppTheme.textSec)),
+                      Text('Sending...', style: AppTheme.ui(size: 11, color: AppTheme.textSec)),
                     ])
                   : ElevatedButton.icon(
                       icon: const Icon(Icons.send_rounded, size: 13),
-                      label: Text('Send', style: GoogleFonts.dmMono(fontSize: 11, color: Colors.white)),
-                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accent, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), minimumSize: Size.zero),
+                      label: Text('Send',
+                          style: AppTheme.ui(size: 11, weight: FontWeight.w600, color: Colors.white)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.accent,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        minimumSize: Size.zero,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
                       onPressed: _send,
                     ),
             ]),
